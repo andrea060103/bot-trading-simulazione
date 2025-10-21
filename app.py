@@ -16,7 +16,7 @@ dati = yf.download(simbolo, period=periodo, interval=intervallo, auto_adjust=Tru
 if dati.empty:
     st.error("Errore: nessun dato scaricato.")
 else:
-    # Se ci sono colonne MultiIndex, prendiamo solo la chiusura aggiustata
+    # Se ci sono colonne MultiIndex, prendiamo solo la chiusura
     if isinstance(dati.columns, pd.MultiIndex):
         df = dati['Close'].copy()
     else:
@@ -30,6 +30,11 @@ else:
     df.loc[df['Prezzo'] > df['MA5'], 'Segnale'] = 'BUY'
     df.loc[df['Prezzo'] < df['MA5'], 'Segnale'] = 'SELL'
 
+    # Reset index per Streamlit selectbox
+    df_reset = df.reset_index()
+    df_reset['Data_str'] = df_reset['Date'].dt.strftime('%Y-%m-%d')
+
+    st.subheader("Tabella dei segnali")
     def color_segnale(val):
         if val == 'BUY':
             return 'background-color: lightgreen'
@@ -37,14 +42,12 @@ else:
             return 'background-color: lightcoral'
         else:
             return ''
-
-    st.subheader("Tabella dei segnali")
-    st.dataframe(df[['Prezzo','MA5','Segnale']].style.applymap(color_segnale, subset=['Segnale']))
+    st.dataframe(df_reset[['Data_str','Prezzo','MA5','Segnale']].style.applymap(color_segnale, subset=['Segnale']))
 
     st.subheader("Grafico Prezzo vs MA5")
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=df.index, y=df['Prezzo'], mode='lines+markers', name='Prezzo', line=dict(color='blue')))
-    fig.add_trace(go.Scatter(x=df.index, y=df['MA5'], mode='lines', name='MA5', line=dict(color='orange')))
+    fig.add_trace(go.Scatter(x=df_reset['Date'], y=df_reset['Prezzo'], mode='lines+markers', name='Prezzo', line=dict(color='blue')))
+    fig.add_trace(go.Scatter(x=df_reset['Date'], y=df_reset['MA5'], mode='lines', name='MA5', line=dict(color='orange')))
     fig.update_layout(
         xaxis_title="Data",
         yaxis_title="Prezzo",
@@ -54,13 +57,10 @@ else:
     st.plotly_chart(fig, use_container_width=True)
 
     st.subheader("Seleziona un giorno per vedere il segnale")
-    giorno_scelto = st.selectbox("Scegli la data", df.index)
+    giorno_scelto = st.selectbox("Scegli la data", df_reset['Data_str'])
 
-    prezzo_giorno = df.loc[giorno_scelto, 'Prezzo']
-    ma5_giorno = df.loc[giorno_scelto, 'MA5']
-    segnale_giorno = df.loc[giorno_scelto, 'Segnale']
-
-    st.markdown(f"**Data:** {giorno_scelto.date()}")
-    st.markdown(f"**Prezzo:** {prezzo_giorno:.2f}")
-    st.markdown(f"**MA5:** {ma5_giorno:.2f}" if not np.isnan(ma5_giorno) else "**MA5:** N/A")
-    st.markdown(f"**Segnale:** {segnale_giorno}")
+    riga = df_reset[df_reset['Data_str'] == giorno_scelto].iloc[0]
+    st.markdown(f"**Data:** {riga['Data_str']}")
+    st.markdown(f"**Prezzo:** {riga['Prezzo']:.2f}")
+    st.markdown(f"**MA5:** {riga['MA5']:.2f}" if not np.isnan(riga['MA5']) else "**MA5:** N/A")
+    st.markdown(f"**Segnale:** {riga['Segnale']}")
