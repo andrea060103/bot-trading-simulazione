@@ -4,36 +4,32 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 
-# ---------------------------------
-# Interfaccia semplice
-# ---------------------------------
 st.title("Bot Trading Simulazione 📈")
 
 simbolo = st.selectbox("Simbolo asset", ["AAPL", "TSLA", "GOOG", "BTC-USD"])
 periodo = st.selectbox("Periodo storico", ["1mo", "3mo", "6mo"])
 intervallo = st.selectbox("Intervallo", ["1d", "1wk"])
 
-# ---------------------------------
-# Scarico dati
-# ---------------------------------
 st.write(f"Scarico dati per {simbolo}...")
-dati = yf.download(simbolo, period=periodo, interval=intervallo)
+dati = yf.download(simbolo, period=periodo, interval=intervallo, auto_adjust=True)
 
 if dati.empty:
     st.error("Errore: nessun dato scaricato.")
 else:
-    df = pd.DataFrame(dati['Close'])
+    # Se ci sono colonne MultiIndex, prendiamo solo la chiusura aggiustata
+    if isinstance(dati.columns, pd.MultiIndex):
+        df = dati['Close'].copy()
+    else:
+        df = dati['Close'].to_frame()
+
     df.rename(columns={'Close':'Prezzo'}, inplace=True)
 
-    # Media mobile 5 giorni
     df['MA5'] = df['Prezzo'].rolling(window=5).mean()
 
-    # Segnali BUY / SELL / HOLD
     df['Segnale'] = 'HOLD'
     df.loc[df['Prezzo'] > df['MA5'], 'Segnale'] = 'BUY'
     df.loc[df['Prezzo'] < df['MA5'], 'Segnale'] = 'SELL'
 
-    # Funzione per colorare i segnali
     def color_segnale(val):
         if val == 'BUY':
             return 'background-color: lightgreen'
@@ -42,13 +38,9 @@ else:
         else:
             return ''
 
-    # Mostra solo le colonne principali
     st.subheader("Tabella dei segnali")
     st.dataframe(df[['Prezzo','MA5','Segnale']].style.applymap(color_segnale, subset=['Segnale']))
 
-    # ---------------------------------
-    # Grafico interattivo con Plotly
-    # ---------------------------------
     st.subheader("Grafico Prezzo vs MA5")
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=df.index, y=df['Prezzo'], mode='lines+markers', name='Prezzo', line=dict(color='blue')))
@@ -61,9 +53,6 @@ else:
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    # ---------------------------------
-    # Seleziona giorno per segnale specifico
-    # ---------------------------------
     st.subheader("Seleziona un giorno per vedere il segnale")
     giorno_scelto = st.selectbox("Scegli la data", df.index)
 
