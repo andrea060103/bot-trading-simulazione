@@ -16,13 +16,16 @@ dati = yf.download(simbolo, period=periodo, interval=intervallo, auto_adjust=Tru
 if dati.empty:
     st.error("Errore: nessun dato scaricato.")
 else:
-    # Se ci sono colonne MultiIndex, prendiamo solo la chiusura
+    # Se MultiIndex, prendiamo la colonna 'Close' giusta
     if isinstance(dati.columns, pd.MultiIndex):
-        df = dati['Close'].copy()
+        # Prendiamo sempre la colonna Close
+        col_close = [col for col in dati.columns if col[0]=='Close'][0]
+        df = dati[[col_close]].copy()
+        df.columns = ['Prezzo']
     else:
-        df = dati['Close'].to_frame()
-
-    df.rename(columns={'Close':'Prezzo'}, inplace=True)
+        # Se colonna semplice
+        df = dati[['Close']].copy()
+        df.rename(columns={'Close':'Prezzo'}, inplace=True)
 
     df['MA5'] = df['Prezzo'].rolling(window=5).mean()
 
