@@ -50,8 +50,31 @@ else:
     # -----------------------------
     # PERCENTUALE IPOTETICA DI OPERAZIONE
     # -----------------------------
-    # più "sicuro" se BUY/SELL è chiaro, meno se HOLD
     df['Percentuale'] = np.where(df['Segnale']=='HOLD', 0, np.random.randint(10, 51))
+
+    # -----------------------------
+    # SIMULAZIONE SALDO
+    # -----------------------------
+    saldo_iniziale = 1000  # saldo iniziale in USD
+    saldo = saldo_iniziale
+    df['Saldo'] = saldo  # colonna saldo
+
+    for i in range(1, len(df)):
+        segnale = df['Segnale'].iloc[i]
+        pct = df['Percentuale'].iloc[i] / 100
+        prezzo_corrente = df['Prezzo'].iloc[i]
+        prezzo_precedente = df['Prezzo'].iloc[i-1]
+
+        if segnale == 'BUY':
+            # guadagno ipotetico: se prezzo sale dopo il segnale
+            delta = (prezzo_corrente - prezzo_precedente) * pct
+            saldo += delta
+        elif segnale == 'SELL':
+            # guadagno ipotetico: se prezzo scende dopo il segnale
+            delta = (prezzo_precedente - prezzo_corrente) * pct
+            saldo += delta
+        # HOLD non cambia saldo
+        df['Saldo'].iloc[i] = saldo
 
     # -----------------------------
     # FUNZIONE COLORAZIONE
@@ -68,15 +91,16 @@ else:
     # MOSTRA DATI
     # -----------------------------
     st.subheader("Tabella dei segnali")
-    st.dataframe(df[['Prezzo','MA5','Segnale','Percentuale']].style.applymap(color_segnale, subset=['Segnale']))
+    st.dataframe(df[['Prezzo','MA5','Segnale','Percentuale','Saldo']].style.applymap(color_segnale, subset=['Segnale']))
 
     st.subheader("Grafico Prezzo vs MA5")
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=df.index, y=df['Prezzo'], mode='lines+markers', name='Prezzo', line=dict(color='blue')))
     fig.add_trace(go.Scatter(x=df.index, y=df['MA5'], mode='lines', name='MA5', line=dict(color='orange')))
+    fig.add_trace(go.Scatter(x=df.index, y=df['Saldo'], mode='lines', name='Saldo', line=dict(color='purple')))
     fig.update_layout(
         xaxis_title="Data",
-        yaxis_title="Prezzo",
+        yaxis_title="Prezzo / Saldo",
         margin=dict(l=20, r=20, t=40, b=20),
         height=400
     )
@@ -89,3 +113,4 @@ else:
     st.markdown(f"**MA5:** {ultimo['MA5']:.2f}" if not np.isnan(ultimo['MA5']) else "**MA5:** N/A")
     st.markdown(f"**Segnale:** {ultimo['Segnale']}")
     st.markdown(f"**Percentuale operazione:** {ultimo['Percentuale']}%")
+    st.markdown(f"**Saldo simulato:** {ultimo['Saldo']:.2f} USD")
