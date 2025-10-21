@@ -3,21 +3,23 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-import time
+from streamlit_autorefresh import st_autorefresh
 
-st.title("Bot Trading Crypto Simulazione 🪙")
+st.title("Bot Trading Crypto Simulazione 🪙 (Aggiornamento al secondo)")
+
+# Aggiornamento automatico ogni 1 secondo
+st_autorefresh(interval=1000, key="bot_refresh")
 
 # -----------------------------
 # CONFIGURAZIONE BOT
 # -----------------------------
 simbolo = st.selectbox("Simbolo crypto", ["BTC-USD", "ETH-USD", "BNB-USD"])
-intervallo = "1m"  # intervallo al minuto
 saldo_iniziale = st.number_input("Saldo iniziale ($)", value=1000.0)
 st.write(f"Saldo di partenza: ${saldo_iniziale:.2f}")
 
 # Percentuale da investire per ogni operazione
 percentuale_base = 0.05  # 5% del saldo
-percentuale_massima = 0.2 # 20% in operazioni più sicure
+percentuale_massima = 0.2 # 20% nelle operazioni più sicure
 
 # -----------------------------
 # FUNZIONI DI SUPPORTO
@@ -38,23 +40,13 @@ def color_segnale(val):
         return ''
 
 # -----------------------------
-# CICLO DI SIMULAZIONE IN TEMPO REALE
+# SCARICO DATI MINUTO
 # -----------------------------
-saldo = saldo_iniziale
-operazioni = []
+dati = yf.download(simbolo, period="1d", interval="1m", auto_adjust=True, progress=False)
 
-placeholder_tabella = st.empty()
-placeholder_grafico = st.empty()
-placeholder_saldo = st.empty()
-
-while True:
-    dati = yf.download(simbolo, period="1d", interval=intervallo, auto_adjust=True, progress=False)
-
-    if dati.empty:
-        st.warning("Errore: nessun dato disponibile al momento.")
-        time.sleep(60)
-        continue
-
+if dati.empty:
+    st.warning("Errore: nessun dato disponibile al momento.")
+else:
     # Gestione MultiIndex o normale
     if isinstance(dati.columns, pd.MultiIndex):
         df = dati['Close'][simbolo].to_frame()
@@ -63,45 +55,47 @@ while True:
     df.columns = ['Prezzo']
 
     df = calcola_segnali(df)
+    df['Cumulativo_%'] = 0.0
 
-    # Gestione operazioni e saldo
-    ultimo = df.iloc[-1]
-    segnale = ultimo['Segnale']
-    prezzo = ultimo['Prezzo']
+    # Simulazione saldo e operazioni
+    saldo = saldo_iniziale
+    operazioni = []
 
-    if segnale == 'BUY':
-        invest = saldo * percentuale_base
-        saldo -= invest
-        guadagno = invest * 0.001  # ipotetico guadagno 0.1%
-        saldo += invest + guadagno
-        operazioni.append(f"BUY ${invest:.2f} a ${prezzo:.2f} => nuovo saldo ${saldo:.2f}")
+    for i in range(len(df)):
+        segnale = df['Segnale'].iloc[i]
+        prezzo = df['Prezzo'].iloc[i]
 
-    elif segnale == 'SELL':
-        invest = saldo * percentuale_base
-        saldo -= invest
-        perdita = invest * 0.001  # ipotetica perdita 0.1%
-        saldo += invest - perdita
-        operazioni.append(f"SELL ${invest:.2f} a ${prezzo:.2f} => nuovo saldo ${saldo:.2f}")
+        if segnale == 'BUY':
+            invest = saldo * percentuale_base
+            saldo -= invest
+            guadagno = invest * 0.001  # ipotetico guadagno 0.1%
+            saldo += invest + guadagno
+            operazioni.append(f"BUY ${invest:.2f} a ${prezzo:.2f} => nuovo saldo ${saldo:.2f}")
+
+        elif segnale == 'SELL':
+            invest = saldo * percentuale_base
+            saldo -= invest
+            perdita = invest * 0.001  # ipotetica perdita 0.1%
+            saldo += invest - perdita
+            operazioni.append(f"SELL ${invest:.2f} a ${prezzo:.2f} => nuovo saldo ${saldo:.2f}")
+
+        df['Cumulativo_%'].iloc[i] = (saldo - saldo_iniziale) / saldo_iniziale * 100
 
     # -----------------------------
-    # AGGIORNAMENTO VISUALIZZAZIONE
+    # VISUALIZZAZIONE
     # -----------------------------
-    with placeholder_tabella.container():
-        st.subheader("Tabella segnali recenti")
-        st.dataframe(df.tail(20).style.applymap(color_segnale, subset=['Segnale']))
+    st.subheader("Tabella segnali recenti")
+    st.dataframe(df.tail(20).style.applymap(color_segnale, subset=['Segnale']))
 
-    with placeholder_grafico.container():
-        st.subheader("Grafico Prezzo vs MA5")
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=df.index, y=df['Prezzo'], mode='lines', name='Prezzo', line=dict(color='blue')))
-        fig.add_trace(go.Scatter(x=df.index, y=df['MA5'], mode='lines', name='MA5', line=dict(color='orange')))
-        st.plotly_chart(fig, use_container_width=True)
+    st.subheader("Grafico Prezzo vs MA5")
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=df.index, y=df['Prezzo'], mode='lines', name='Prezzo', line=dict(color='blue')))
+    fig.add_trace(go.Scatter(x=df.index, y=df['MA5'], mode='lines', name='MA5', line=dict(color='orange')))
+    st.plotly_chart(fig, use_container_width=True)
 
-    with placeholder_saldo.container():
-        st.subheader(f"Saldo attuale: ${saldo:.2f}")
-        st.markdown("**Ultime operazioni:**")
-        for op in operazioni[-5:]:
-            st.markdown(op)
+    st.subheader(f"Saldo attuale: ${saldo:.2f}")
+    st.markdown("**Ultime operazioni:**")
+    for op in operazioni[-5:]:
+        st.markdown(op)
 
-    # Aspetta 60 secondi prima del prossimo aggiornamento
-    time.sleep(60)
+    st.subheader(f"Guadagno/Perdita cumulativa: {df['Cumulativo_%'].iloc[-1]:.2f}%")
